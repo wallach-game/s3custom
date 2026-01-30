@@ -31,6 +31,21 @@ The host agent uses newline-delimited JSON (NDJSON) over the Unix socket:
 
 Only whitelisted commands are accepted. Arguments are validated against shell injection patterns.
 
+## Quick Install
+
+```bash
+sudo ./install.sh
+```
+
+The install script handles everything:
+- Builds the host agent and container app
+- Installs and starts the systemd service
+- Detects your Node.js path automatically
+- Creates `/mnt/disks` if missing
+- Builds and starts the Docker container
+
+After install, open **http://localhost:8080**.
+
 ## Directory Structure
 
 ```
@@ -39,10 +54,11 @@ s3custom/
 ├── tsconfig.json
 ├── Dockerfile                # Multi-stage build for the container
 ├── docker-compose.yml        # Container config with socket + volume mounts
+├── install.sh                # Automated installation script
 ├── host-agent/
 │   ├── package.json
 │   ├── tsconfig.json
-│   ├── hostagent.service     # systemd unit file
+│   ├── hostagent.service     # systemd unit template
 │   └── src/
 │       └── index.ts          # Unix socket server with command whitelist
 └── src/
@@ -61,23 +77,25 @@ s3custom/
         ├── style.css         # Global styles
         ├── app.js            # API client + hash router
         ├── components/
-        │   ├── disk-list.js
-        │   ├── raid-manager.js
-        │   ├── power-control.js
-        │   └── file-manager.js
+        │   ├── disk-list.js      # Disk overview with SMART stats
+        │   ├── raid-manager.js   # RAID array creation/status
+        │   ├── power-control.js  # Disk power management
+        │   └── file-manager.js   # File browser with upload/delete
         └── shared/
-            └── base-component.js
+            └── base-component.js # Web Component base class
 ```
 
-## Setup
+## Manual Setup
+
+If you prefer to set things up step by step instead of using `install.sh`:
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 18+
 - Docker and Docker Compose (for the container app)
 - Linux host with `smartctl`, `hdparm`, `mdadm`, `lsblk` installed
 
-### 1. Install and Start the Host Agent
+### 1. Build and Start the Host Agent
 
 ```bash
 cd host-agent
@@ -95,21 +113,22 @@ sudo node dist/index.js
 
 ```bash
 sudo cp hostagent.service /etc/systemd/system/
-# Edit ExecStart path in the unit file if your install location differs
 sudo systemctl daemon-reload
 sudo systemctl enable --now hostagent
 ```
 
 The agent creates a socket at `/var/run/hostagent.sock`.
 
+> **Note:** The systemd service file expects Node.js at a standard path. If you use a version manager (nvm, mise, fnm), the install script handles this automatically. For manual setup, edit the `ExecStart` and `Environment=PATH` lines in the service file.
+
 ### 2. Start the Container App
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
 This will:
-- Build the container image
+- Build the container image (Node 20 Alpine, multi-stage)
 - Mount `/mnt/disks` for file operations
 - Mount `/var/run/hostagent.sock` for disk commands
 - Expose the admin panel on port **8080**
@@ -129,6 +148,17 @@ Or with ts-node:
 ```bash
 npm run dev
 ```
+
+## Admin Panel
+
+The web UI is built with vanilla Web Components (no framework, no build step). Four sections accessible from the sidebar:
+
+- **Disks** — Overview of all block devices with SMART health status, temperature, and power-on hours. Summary stat cards at the top.
+- **RAID** — View active mdadm arrays, create new arrays by selecting a RAID level and member devices.
+- **Power** — Per-disk power state monitoring, spin down/wake controls, and configurable idle timeouts via hdparm.
+- **Files** — Directory browser for `/mnt/disks` with breadcrumb navigation, file upload, folder creation, and delete.
+
+The sidebar footer shows a live connection indicator for the host agent.
 
 ## API Reference
 
@@ -193,7 +223,7 @@ Actions: `spindown`, `spinup`, `timeout` (requires `value` in seconds).
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/files?path=/` | List directory contents |
-| `POST` | `/api/files` | Upload a file (multipart form) |
+| `POST` | `/api/files` | Upload a file (multipart form, max 100MB) |
 | `POST` | `/api/files/mkdir` | Create a directory |
 | `PUT` | `/api/files` | Update file content |
 | `DELETE` | `/api/files?path=/somefile` | Delete a file or directory |
@@ -234,9 +264,11 @@ All file paths are resolved relative to `/mnt/disks` and validated against path 
 - **Command whitelist** — The host agent only executes `lsblk`, `smartctl`, `hdparm`, `mdadm`, `df`, `mount`, and `umount`. All other commands are rejected.
 - **Argument validation** — Arguments containing shell metacharacters (`;`, `&`, `|`, `` ` ``, `$`, `(`, `)`, `{`, `}`) are rejected.
 - **execFile** — Commands are executed with `execFile` (not `exec`), preventing shell interpretation.
-- **Path traversal prevention** — All file operations validate that resolved paths stay within `/mnt/disks`.
+- **Path traversal prevention** — All file operations validate that resolved paths stay within `/mnt/disks`. Leading slashes are stripped from user input before resolution.
 - **No auth** — The service assumes a trusted network. Add a reverse proxy with authentication if exposed beyond localhost.
 - **No `--privileged`** — The Docker container runs unprivileged. All privileged operations are handled by the host agent.
+- **Socket permissions** — The Unix socket is created with mode `0666` for container access. Restrict as needed for your environment.
+- **Request timeout** — All host agent commands have a 30-second execution timeout.
 
 ## Configuration
 
@@ -247,6 +279,22 @@ Environment variables for the container:
 | `PORT` | `8080` | HTTP server port |
 | `HOSTAGENT_SOCKET` | `/var/run/hostagent.sock` | Path to the host agent Unix socket |
 | `FILES_ROOT` | `/mnt/disks` | Root directory for file operations |
+
+The host agent also accepts `HOSTAGENT_SOCKET` to override its listen path.
+
+## Management
+
+```bash
+# Host agent
+sudo systemctl status hostagent
+sudo systemctl restart hostagent
+journalctl -u hostagent -f
+
+# Container app
+docker compose logs -f
+docker compose restart
+docker compose down && docker compose up -d --build
+```
 
 ## License
 

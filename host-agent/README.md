@@ -41,15 +41,26 @@ Communication uses newline-delimited JSON (NDJSON) over the Unix socket at `/var
 
 ## Installation
 
+The easiest way is to use the project's install script from the root directory:
+
+```bash
+sudo ./install.sh
+```
+
+### Manual Installation
+
 ```bash
 npm install
 npm run build
 ```
 
-### Running with systemd
+#### Running with systemd
+
+The install script generates the service file with the correct Node.js path automatically. For manual setup:
 
 ```bash
 sudo cp hostagent.service /etc/systemd/system/
+# Edit ExecStart and Environment=PATH to match your Node.js location
 sudo systemctl daemon-reload
 sudo systemctl enable --now hostagent
 ```
@@ -60,16 +71,22 @@ sudo systemctl status hostagent
 journalctl -u hostagent -f
 ```
 
-### Running manually
+#### Running manually
 
 ```bash
 sudo node dist/index.js
+```
+
+#### Custom socket path
+
+```bash
+sudo HOSTAGENT_SOCKET=/tmp/hostagent.sock node dist/index.js
 ```
 
 ## Security Notes
 
 - Uses `execFile` instead of `exec` to prevent shell injection
 - Arguments are validated against shell metacharacters (`;`, `&`, `|`, `` ` ``, `$`, etc.)
-- The socket is created with mode `0660`
+- The socket is created with mode `0666` for container access
 - Runs as root (required for disk management commands)
 - 30-second timeout on all command executions
