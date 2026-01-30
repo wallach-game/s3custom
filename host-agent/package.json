@@ -1,0 +1,17 @@
+{
+  "name": "s3custom-host-agent",
+  "version": "1.0.0",
+  "description": "Host agent for S3 Custom Storage - executes whitelisted system commands",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.0"
+  }
+}

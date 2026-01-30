@@ -1,0 +1,132 @@
+import * as net from "net";
+import * as fs from "fs";
+import { execFile } from "child_process";
+
+const SOCKET_PATH = process.env.HOSTAGENT_SOCKET || "/var/run/hostagent.sock";
+
+const WHITELISTED_COMMANDS: Record<string, string> = {
+  lsblk: "/usr/bin/lsblk",
+  smartctl: "/usr/sbin/smartctl",
+  hdparm: "/usr/sbin/hdparm",
+  mdadm: "/usr/sbin/mdadm",
+  df: "/usr/bin/df",
+  mount: "/usr/bin/mount",
+  umount: "/usr/bin/umount",
+};
+
+const DANGEROUS_PATTERNS = /[;&|`$(){}]/;
+
+interface Request {
+  cmd: string;
+  args?: string[];
+}
+
+interface Response {
+  ok: boolean;
+  stdout?: string;
+  stderr?: string;
+  error?: string;
+}
+
+function validateArgs(args: string[]): boolean {
+  for (const arg of args) {
+    if (DANGEROUS_PATTERNS.test(arg)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function handleRequest(req: Request): Promise<Response> {
+  return new Promise((resolve) => {
+    if (!req.cmd || typeof req.cmd !== "string") {
+      resolve({ ok: false, error: "Missing or invalid cmd" });
+      return;
+    }
+
+    const bin = WHITELISTED_COMMANDS[req.cmd];
+    if (!bin) {
+      resolve({ ok: false, error: `Command not whitelisted: ${req.cmd}` });
+      return;
+    }
+
+    const args = req.args ?? [];
+    if (!Array.isArray(args) || !args.every((a) => typeof a === "string")) {
+      resolve({ ok: false, error: "Args must be an array of strings" });
+      return;
+    }
+
+    if (!validateArgs(args)) {
+      resolve({ ok: false, error: "Args contain disallowed characters" });
+      return;
+    }
+
+    execFile(bin, args, { timeout: 30000 }, (err, stdout, stderr) => {
+      if (err) {
+        resolve({
+          ok: false,
+          error: err.message,
+          stdout: stdout || undefined,
+          stderr: stderr || undefined,
+        });
+      } else {
+        resolve({ ok: true, stdout, stderr: stderr || undefined });
+      }
+    });
+  });
+}
+
+function startServer(): void {
+  if (fs.existsSync(SOCKET_PATH)) {
+    fs.unlinkSync(SOCKET_PATH);
+  }
+
+  const server = net.createServer((conn) => {
+    let buffer = "";
+
+    conn.on("data", (data) => {
+      buffer += data.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop()!;
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+
+        let req: Request;
+        try {
+          req = JSON.parse(line);
+        } catch {
+          conn.write(JSON.stringify({ ok: false, error: "Invalid JSON" }) + "\n");
+          continue;
+        }
+
+        handleRequest(req).then((res) => {
+          conn.write(JSON.stringify(res) + "\n");
+        });
+      }
+    });
+
+    conn.on("error", (err) => {
+      console.error("Connection error:", err.message);
+    });
+  });
+
+  server.listen(SOCKET_PATH, () => {
+    fs.chmodSync(SOCKET_PATH, 0o666);
+    console.log(`Host agent listening on ${SOCKET_PATH}`);
+  });
+
+  const shutdown = () => {
+    console.log("Shutting down...");
+    server.close();
+    if (fs.existsSync(SOCKET_PATH)) {
+      fs.unlinkSync(SOCKET_PATH);
+    }
+    process.exit(0);
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}
+
+startServer();

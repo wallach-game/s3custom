@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - /mnt/disks:/mnt/disks
+      - /var/run/hostagent.sock:/var/run/hostagent.sock
+    environment:
+      - PORT=8080
+      - HOSTAGENT_SOCKET=/var/run/hostagent.sock
+      - FILES_ROOT=/mnt/disks
+    restart: unless-stopped
