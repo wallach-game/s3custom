@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import * as diskService from "../services/disk.service";
 import * as raidService from "../services/raid.service";
 import * as powerService from "../services/power.service";
+import * as recoveryService from "../services/recovery.service";
 import { log, LogLevel } from "../services/logging.service";
 
 const router = Router();
@@ -179,6 +180,50 @@ router.get("/:disk/speed", async (req: Request, res: Response) => {
     res.json({ disk, speed, isAnomaly });
   } catch (err: any) {
     log(LogLevel.ERROR, `Failed to get disk speed for disk ${req.params.disk}`, { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// New endpoint for disk examination
+router.get("/examine/:disk", async (req: Request, res: Response) => {
+  try {
+    const disk = req.params.disk as string;
+    const result = await diskService.examineDisk(disk);
+    res.json(result);
+  } catch (err: any) {
+    log(LogLevel.ERROR, `Failed to examine disk ${req.params.disk}`, { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/disks/recover - Mount a disk in read-only recovery mode
+router.post("/recover", async (req: Request, res: Response) => {
+  try {
+    const { disk, mountPath } = req.body;
+    if (!disk || !mountPath) {
+      res.status(400).json({ error: "disk and mountPath are required" });
+      return;
+    }
+    const result = await recoveryService.mountDiskReadOnly(disk, mountPath);
+    res.json({ ok: true, message: result });
+  } catch (err: any) {
+    log(LogLevel.ERROR, `Failed to recover disk ${req.body.disk} to ${req.body.mountPath}`, { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/disks/clone - Clone a disk
+router.post("/clone", async (req: Request, res: Response) => {
+  try {
+    const { sourceDisk, destinationPath, logfilePath } = req.body;
+    if (!sourceDisk || !destinationPath) {
+      res.status(400).json({ error: "sourceDisk and destinationPath are required" });
+      return;
+    }
+    const result = await recoveryService.cloneDisk(sourceDisk, destinationPath, logfilePath);
+    res.json({ ok: true, message: result });
+  } catch (err: any) {
+    log(LogLevel.ERROR, `Failed to clone disk ${req.body.sourceDisk} to ${req.body.destinationPath}`, { error: err.message });
     res.status(500).json({ error: err.message });
   }
 });

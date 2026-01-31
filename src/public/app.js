@@ -1,3 +1,7 @@
+import { ExamineDisk } from "./components/examine-disk.js";
+import { RecoverDisk } from "./components/recover-disk.js";
+import { CloneDisk } from "./components/clone-disk.js";
+
 // API client
 class Api {
   async get(url) {
@@ -44,6 +48,9 @@ window.api = new Api();
 // Router
 const routes = {
   disks: "disk-list",
+  examine: "examine-disk",
+  recover: "recover-disk",
+  clone: "clone-disk",
   raid: "raid-manager",
   power: "power-control",
   files: "file-manager",

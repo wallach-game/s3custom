@@ -18,6 +18,37 @@ export interface SmartStatus {
   raw: string;
 }
 
+// New interfaces for disk examination
+export interface PartitionInfo {
+  name: string;
+  size: string;
+  fstype: string | null;
+  mountpoint: string | null;
+}
+
+export interface RaidInfo {
+  isRaid: boolean;
+  metadata: string | null; // Raw output from mdadm --examine
+}
+
+export interface FilesystemInfo {
+  type: string | null;
+  label: string | null;
+  uuid: string | null;
+}
+
+export interface DiskExaminationResult {
+  disk: string;
+  exists: boolean;
+  partitions: PartitionInfo[];
+  raidInfo: RaidInfo;
+  filesystemInfo: FilesystemInfo | null; // For the entire disk, if applicable
+  rawLsblk: string;
+  rawMdadmExamine: string;
+  rawBlkid: string;
+}
+
+
 export async function listDisks(): Promise<DiskInfo[]> {
   const { stdout } = await sendCommand("lsblk", [
     "-J",
@@ -100,4 +131,150 @@ export async function getDiskSpeed(disk: string): Promise<{ speed: number; isAno
   const isAnomaly = checkSpeedAnomaly(disk, speed);
 
   return { speed, isAnomaly };
+}
+
+// New function to examine disk metadata
+export async function examineDisk(disk: string): Promise<DiskExaminationResult> {
+  const devicePath = disk.startsWith("/dev/") ? disk : `/dev/${disk}`;
+  let rawLsblk = "";
+  let rawMdadmExamine = "";
+  let rawBlkid = "";
+  const partitions: PartitionInfo[] = [];
+  let filesystemInfo: FilesystemInfo | null = null;
+  let raidInfo: RaidInfo = { isRaid: false, metadata: null };
+
+  try {
+    // 1. Get partition table and filesystem types using lsblk
+    const { stdout: lsblkOutput } = await sendCommand("lsblk", [
+      "-J",
+      "-o",
+      "NAME,SIZE,FSTYPE,MOUNTPOINT",
+      devicePath,
+    ]);
+    rawLsblk = lsblkOutput;
+    const lsblkData = JSON.parse(lsblkOutput);
+
+    if (lsblkData.blockdevices && lsblkData.blockdevices.length > 0) {
+      const mainDisk = lsblkData.blockdevices[0];
+      if (mainDisk.children) {
+        for (const child of mainDisk.children) {
+          partitions.push({
+            name: child.name,
+            size: child.size,
+            fstype: child.fstype || null,
+            mountpoint: child.mountpoint || null,
+          });
+        }
+      }
+      // Check filesystem for the main disk itself, if it's not partitioned
+      if (mainDisk.fstype && partitions.length === 0) {
+        filesystemInfo = {
+          type: mainDisk.fstype,
+          label: null, // blkid will give us label/uuid
+          uuid: null,
+        };
+      }
+    }
+  } catch (err: any) {
+    log(LogLevel.WARN, `lsblk for ${disk} failed`, { error: err.message });
+  }
+
+  // 2. Check for RAID superblocks
+  try {
+    const { stdout: mdadmOutput, stderr: mdadmStderr } = await sendCommand("mdadm", [
+      "--examine",
+      devicePath,
+    ]);
+    rawMdadmExamine = mdadmOutput;
+    if (mdadmOutput.includes("MD device") || mdadmOutput.includes("RAID")) {
+      raidInfo.isRaid = true;
+      raidInfo.metadata = mdadmOutput;
+    } else if (mdadmStderr.includes("No super block found") || mdadmStderr.includes("No RAID superblock on")) {
+      // Expected stderr for non-RAID disks, don't treat as error
+      raidInfo.isRaid = false;
+      raidInfo.metadata = "No RAID superblock found.";
+    } else {
+      // Other unexpected stderr
+      raidInfo.isRaid = false;
+      raidInfo.metadata = mdadmStderr || "Unknown error during mdadm --examine.";
+    }
+  } catch (err: any) {
+    // mdadm --examine can fail if not a RAID disk, check stderr for specific messages
+    if ((err.stderr || '').includes("No super block found") || (err.stderr || '').includes("No RAID superblock on")) {
+      raidInfo.isRaid = false;
+      raidInfo.metadata = err.stderr;
+    } else {
+      log(LogLevel.WARN, `mdadm --examine for ${disk} failed`, { error: err.message, stderr: err.stderr });
+      raidInfo.isRaid = false;
+      raidInfo.metadata = err.stderr || err.message;
+    }
+  }
+
+  // 3. Check filesystem type, label, UUID using blkid (for disk and partitions)
+  try {
+    const { stdout: blkidOutput } = await sendCommand("blkid", [
+      "-o",
+      "export",
+      devicePath,
+    ]);
+    rawBlkid = blkidOutput;
+    const blkidLines = blkidOutput.split("\n").filter(Boolean);
+    const blkidMap: { [key: string]: string } = {};
+    blkidLines.forEach(line => {
+      const parts = line.split("=");
+      if (parts.length === 2) {
+        blkidMap[parts[0]] = parts[1];
+      }
+    });
+
+    if (blkidMap.TYPE) {
+      // If fs info was not set by lsblk, set it here for the main disk
+      if (!filesystemInfo) {
+        filesystemInfo = {
+          type: blkidMap.TYPE || null,
+          label: blkidMap.LABEL || null,
+          uuid: blkidMap.UUID || null,
+        };
+      } else {
+        // Update existing info with label/uuid
+        filesystemInfo.label = blkidMap.LABEL || null;
+        filesystemInfo.uuid = blkidMap.UUID || null;
+      }
+    }
+
+    // Also get blkid for partitions to update fstype if lsblk didn't provide it
+    for (const part of partitions) {
+        try {
+            const { stdout: partBlkidOutput } = await sendCommand("blkid", ["-o", "export", `/dev/${part.name}`]);
+            const partBlkidLines = partBlkidOutput.split("\n").filter(Boolean);
+            const partBlkidMap: { [key: string]: string } = {};
+            partBlkidLines.forEach(line => {
+                const parts = line.split("=");
+                if (parts.length === 2) {
+                    partBlkidMap[parts[0]] = parts[1];
+                }
+            });
+            if (partBlkidMap.TYPE) {
+                part.fstype = partBlkidMap.TYPE;
+            }
+        } catch (partBlkidErr: any) {
+            log(LogLevel.DEBUG, `blkid for partition ${part.name} failed`, { error: partBlkidErr.message });
+        }
+    }
+
+  } catch (err: any) {
+    log(LogLevel.WARN, `blkid for ${disk} failed`, { error: err.message });
+  }
+
+
+  return {
+    disk,
+    exists: true, // Assuming if we got this far, the disk exists
+    partitions,
+    raidInfo,
+    filesystemInfo,
+    rawLsblk,
+    rawMdadmExamine,
+    rawBlkid,
+  };
 }

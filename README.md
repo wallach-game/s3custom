@@ -17,7 +17,7 @@ The system consists of two components:
 └──────────────────────────────┘                         └──────────────────────┘
 ```
 
-- **Host Agent** — Small Node.js service running directly on the host. Listens on a Unix socket and executes a whitelisted set of system commands (smartctl, hdparm, mdadm, lsblk, etc.). Runs as root via systemd.
+- **Host Agent** — Small Node.js service running directly on the host. Listens on a Unix socket and executes a whitelisted set of system commands (smartctl, hdparm, mdadm, lsblk, fdisk, blkid, file, mkdir, ntfs-3g, ddrescue, etc.). Runs as root via systemd.
 - **Container App** — Express.js REST API + Web Components admin panel served from Docker. Connects to the host agent through the mounted Unix socket. The container does **not** need `--privileged` since all privileged operations go through the socket.
 
 ### Communication Protocol
@@ -169,6 +169,9 @@ The sidebar footer shows a live connection indicator for the host agent.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/disks` | List all disks with SMART status |
+| `GET` | `/api/disks/examine/:disk` | Examine disk for partitions, RAID metadata, and filesystem types |
+| `POST` | `/api/disks/recover` | Mount a disk in read-only recovery mode |
+| `POST` | `/api/disks/clone` | Clone a disk to an image file or another device |
 | `GET` | `/api/disks/:disk/speed` | Test disk read speed and check for anomalies |
 | `GET` | `/api/disks/raid` | Get all RAID array statuses |
 | `POST` | `/api/disks/raid` | Create a RAID array |

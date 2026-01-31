@@ -2,6 +2,7 @@ export enum LogLevel {
   INFO = "INFO",
   WARN = "WARN",
   ERROR = "ERROR",
+  DEBUG = "DEBUG",
 }
 
 export function log(level: LogLevel, message: string, data?: any) {

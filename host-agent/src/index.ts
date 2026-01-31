@@ -12,6 +12,12 @@ const WHITELISTED_COMMANDS: Record<string, string> = {
   df: "/usr/bin/df",
   mount: "/usr/bin/mount",
   umount: "/usr/bin/umount",
+  fdisk: "/usr/sbin/fdisk",
+  blkid: "/usr/sbin/blkid",
+  file: "/usr/bin/file",
+  mkdir: "/usr/bin/mkdir",
+  "ntfs-3g": "/usr/bin/ntfs-3g",
+  ddrescue: "/usr/bin/ddrescue",
 };
 
 const DANGEROUS_PATTERNS = /[;&|`$(){}]/;

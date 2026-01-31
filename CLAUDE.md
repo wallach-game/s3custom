@@ -3,7 +3,7 @@
 ## Architecture
 Two-component system: Host Agent + Container App communicating over Unix socket (NDJSON protocol).
 
-- **Host Agent** (`host-agent/`) — Node.js service running on host as root via systemd. Listens on `/var/run/hostagent.sock`. Executes whitelisted commands only: `lsblk`, `smartctl`, `hdparm`, `mdadm`, `df`, `mount`, `umount`.
+- **Host Agent** (`host-agent/`) — Node.js service running on host as root via systemd. Listens on `/var/run/hostagent.sock`. Executes whitelisted commands only: `lsblk`, `smartctl`, `hdparm`, `mdadm`, `df`, `mount`, `umount`, `fdisk`, `blkid`, `file`, `mkdir`, `ntfs-3g`, `ddrescue`.
 - **Container App** (`src/`) — Express.js REST API + vanilla Web Components admin panel. Runs in Docker on port 8080. Connects to host agent via mounted socket. No `--privileged` needed.
 
 ## Key Paths
@@ -35,6 +35,9 @@ Node is installed via mise at `/home/jirka/.local/share/mise/installs/node/25.2.
 
 ## API Routes
 - `GET /api/disks` — list disks with SMART status
+- `GET /api/disks/examine/:disk` — examine disk metadata (partitions, RAID, filesystem)
+- `POST /api/disks/recover` — mount disk in read-only recovery mode
+- `POST /api/disks/clone` — clone disk to image or another device
 - `GET/POST/DELETE /api/disks/raid` — RAID management (mdadm)
 - `POST /api/disks/power`, `GET /api/disks/power/:disk` — hdparm power control
 - `GET/POST/PUT/DELETE /api/files` — file CRUD on /mnt/disks
