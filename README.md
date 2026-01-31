@@ -68,10 +68,12 @@ s3custom/
     │   ├── disks.ts          # Disk, RAID, and power endpoints
     │   └── files.ts          # File CRUD endpoints
     ├── services/
-    │   ├── disk.service.ts   # Disk listing, SMART status parsing
-    │   ├── raid.service.ts   # RAID create/status/remove via mdadm
+    │   ├── disk.service.ts   # Disk listing, SMART status parsing, speed testing
+    │   ├── raid.service.ts   # RAID create/status/remove/manage via mdadm
     │   ├── power.service.ts  # hdparm spin up/down, idle timeout
-    │   └── file.service.ts   # File CRUD on /mnt/disks
+    │   ├── file.service.ts   # File CRUD on /mnt/disks
+    │   ├── logging.service.ts # Centralized logging utility
+    │   └── anomaly.service.ts # Disk performance anomaly detection
     └── public/
         ├── index.html        # Admin panel shell
         ├── style.css         # Global styles
@@ -153,8 +155,8 @@ npm run dev
 
 The web UI is built with vanilla Web Components (no framework, no build step). Four sections accessible from the sidebar:
 
-- **Disks** — Overview of all block devices with SMART health status, temperature, and power-on hours. Summary stat cards at the top.
-- **RAID** — View active mdadm arrays, create new arrays by selecting a RAID level and member devices.
+- **Disks** — Overview of all block devices with SMART health status, temperature, and power-on hours. Now includes a disk speed test with anomaly detection for individual disks.
+- **RAID** — View active mdadm arrays, create new arrays by selecting a RAID level and member devices. You can now also fail, remove, and add individual disks to existing RAID arrays, or clone a single disk to a new RAID 1 array.
 - **Power** — Per-disk power state monitoring, spin down/wake controls, and configurable idle timeouts via hdparm.
 - **Files** — Directory browser for `/mnt/disks` with breadcrumb navigation, file upload, folder creation, and delete.
 
@@ -167,9 +169,14 @@ The sidebar footer shows a live connection indicator for the host agent.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/disks` | List all disks with SMART status |
+| `GET` | `/api/disks/:disk/speed` | Test disk read speed and check for anomalies |
 | `GET` | `/api/disks/raid` | Get all RAID array statuses |
 | `POST` | `/api/disks/raid` | Create a RAID array |
+| `POST` | `/api/disks/raid/clone` | Clone a disk to a new degraded RAID 1 array |
 | `DELETE` | `/api/disks/raid/:device` | Stop and remove a RAID array |
+| `POST` | `/api/disks/raid/:device/fail` | Mark a disk as faulty in a RAID array |
+| `POST` | `/api/disks/raid/:device/remove` | Remove a disk from a RAID array |
+| `POST` | `/api/disks/raid/:device/add` | Add a disk (e.g., a spare) to a RAID array |
 | `POST` | `/api/disks/power` | Control disk power (spin up/down/timeout) |
 | `GET` | `/api/disks/power/:disk` | Get disk power state |
 
@@ -194,6 +201,18 @@ Returns an array of disks with SMART health data.
 ]
 ```
 
+#### `GET /api/disks/:disk/speed`
+
+Tests the read speed of a disk and returns the result, including if an anomaly was detected.
+
+```json
+{
+  "disk": "sda",
+  "speed": 123.45,
+  "isAnomaly": false
+}
+```
+
 #### `POST /api/disks/raid`
 
 Create a new RAID array.
@@ -207,6 +226,46 @@ Create a new RAID array.
 
 Valid levels: `0`, `1`, `5`, `6`, `10`.
 
+#### `POST /api/disks/raid/clone`
+
+Clones an existing disk to a new degraded RAID 1 array. The original disk's data is preserved.
+
+```json
+{
+  "disk": "sdb"
+}
+```
+
+#### `POST /api/disks/raid/:device/fail`
+
+Marks a specified disk as faulty within a RAID array.
+
+```json
+{
+  "disk": "sdc"
+}
+```
+
+#### `POST /api/disks/raid/:device/remove`
+
+Removes a specified disk from a RAID array.
+
+```json
+{
+  "disk": "sdc"
+}
+```
+
+#### `POST /api/disks/raid/:device/add`
+
+Adds a specified disk (e.g., a spare) to a RAID array.
+
+```json
+{
+  "disk": "sde"
+}
+```
+
 #### `POST /api/disks/power`
 
 ```json
@@ -217,7 +276,6 @@ Valid levels: `0`, `1`, `5`, `6`, `10`.
 ```
 
 Actions: `spindown`, `spinup`, `timeout` (requires `value` in seconds).
-
 ### Files
 
 | Method | Path | Description |

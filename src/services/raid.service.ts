@@ -1,10 +1,15 @@
 import { sendCommand } from "../socket-client";
 
+export interface RaidDevice {
+  name: string;
+  state: string;
+}
+
 export interface RaidStatus {
   device: string;
   level: string;
   state: string;
-  devices: string[];
+  devices: RaidDevice[];
   raw: string;
 }
 
@@ -76,15 +81,19 @@ export async function getRaidStatus(): Promise<RaidStatus[]> {
           ]);
 
           const stateMatch = detail.match(/State\s*:\s*(.+)/);
-          const devicesInArray: string[] = [];
-          const devRegex = /\/dev\/\w+/g;
-          let m;
-          // Extract member devices from detail output
-          const activeSection = detail.split("Number   Major   Minor")[1] || "";
-          while ((m = devRegex.exec(activeSection)) !== null) {
-            devicesInArray.push(m[0]);
-          }
+          const devicesInArray: RaidDevice[] = [];
+          
+          const deviceSection = detail.split("Number   Major   Minor   RaidDevice State")[1] || "";
+          const deviceLines = deviceSection.trim().split("\n");
 
+          for(const deviceLine of deviceLines) {
+            const parts = deviceLine.trim().split(/\s+/);
+            if(parts.length < 5) continue;
+            const name = parts[parts.length -1];
+            const state = parts.slice(4, parts.length - 1).join(" ");
+            devicesInArray.push({ name, state });
+          }
+          
           arrays.push({
             device,
             level: levelMatch?.[1] || "unknown",
@@ -115,6 +124,87 @@ export async function removeRaid(device: string): Promise<string> {
 
   await sendCommand("mdadm", ["--stop", devicePath]);
   const { stdout } = await sendCommand("mdadm", ["--remove", devicePath]);
+
+  return stdout;
+}
+
+export async function failDisk(
+  raidDevice: string,
+  disk: string
+): Promise<string> {
+  const raidDevicePath = raidDevice.startsWith("/dev/")
+    ? raidDevice
+    : `/dev/${raidDevice}`;
+  const diskPath = disk.startsWith("/dev/") ? disk : `/dev/${disk}`;
+  const { stdout } = await sendCommand("mdadm", [
+    raidDevicePath,
+    "--fail",
+    diskPath,
+  ]);
+  return stdout;
+}
+
+export async function removeDisk(
+  raidDevice: string,
+  disk: string
+): Promise<string> {
+  const raidDevicePath = raidDevice.startsWith("/dev/")
+    ? raidDevice
+    : `/dev/${raidDevice}`;
+  const diskPath = disk.startsWith("/dev/") ? disk : `/dev/${disk}`;
+  const { stdout } = await sendCommand("mdadm", [
+    raidDevicePath,
+    "--remove",
+    diskPath,
+  ]);
+  return stdout;
+}
+
+export async function addDisk(
+  raidDevice: string,
+  disk: string
+): Promise<string> {
+  const raidDevicePath = raidDevice.startsWith("/dev/")
+    ? raidDevice
+    : `/dev/${raidDevice}`;
+  const diskPath = disk.startsWith("/dev/") ? disk : `/dev/${disk}`;
+  const { stdout } = await sendCommand("mdadm", [
+    raidDevicePath,
+    "--add",
+    diskPath,
+  ]);
+  return stdout;
+}
+
+export async function cloneToRaid(disk: string): Promise<string> {
+  const devicePath = disk.startsWith("/dev/") ? disk : `/dev/${disk}`;
+
+  // Find next available md device
+  const { stdout: mdstat } = await sendCommand("lsblk", [
+    "-J",
+    "-o",
+    "NAME,TYPE",
+  ]);
+  const existing = JSON.parse(mdstat);
+  const mdDevices = (existing.blockdevices || [])
+    .filter((d: any) => d.type === "raid0" || d.type === "raid1" || d.type === "raid5" || d.type === "raid6" || d.type === "raid10")
+    .map((d: any) => d.name);
+
+  let mdNum = 0;
+  while (mdDevices.includes(`md${mdNum}`)) mdNum++;
+  const mdDevice = `/dev/md${mdNum}`;
+
+  const { stdout } = await sendCommand("mdadm", [
+    "--create",
+    mdDevice,
+    "--level",
+    "1",
+    "--raid-devices",
+    "2",
+    "--run",
+    devicePath,
+    "missing",
+  ]);
 
   return stdout;
 }

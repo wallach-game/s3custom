@@ -58,8 +58,27 @@ class RaidManager extends BaseComponent {
                       <td><code style="color:var(--text)">${this.esc(r.device)}</code></td>
                       <td><span class="badge badge-muted">RAID ${this.esc(r.level)}</span></td>
                       <td>${this.stateBadge(r.state)}</td>
-                      <td>${r.devices.map((d) => `<code style="font-size:12px">${this.esc(d)}</code>`).join(" ") || "\u2014"}</td>
                       <td>
+                        <div class="raid-members">
+                        ${r.devices.map((d) => `
+                          <div class="raid-member">
+                            <code style="font-size:12px">${this.esc(d.name)}</code>
+                            <span class="badge badge-small ${/active|sync/.test(d.state) ? 'badge-success' : 'badge-danger'}">${this.esc(d.state)}</span>
+                            <button class="btn-icon btn-warning fail-disk" title="Mark as faulty" data-device="${this.esc(r.device)}" data-disk="${this.esc(d.name)}">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
+                            </button>
+                            <button class="btn-icon btn-danger remove-disk" title="Remove from array" data-device="${this.esc(r.device)}" data-disk="${this.esc(d.name)}">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
+                          </div>
+                        `).join("") || "\u2014"}
+                        </div>
+                      </td>
+                      <td>
+                        <button class="btn-success add-spare" data-device="${this.esc(r.device)}">
+                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                          Add Spare
+                        </button>
                         <button class="btn-danger remove-raid" data-device="${this.esc(r.device)}">
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                           Remove
@@ -111,6 +130,15 @@ class RaidManager extends BaseComponent {
       this.$$(".remove-raid").forEach((btn) => {
         btn.addEventListener("click", () => this.removeRaid(btn.dataset.device));
       });
+      this.$$(".add-spare").forEach((btn) => {
+        btn.addEventListener("click", () => this.addSpare(btn.dataset.device));
+      });
+      this.$$(".fail-disk").forEach((btn) => {
+        btn.addEventListener("click", () => this.failDisk(btn.dataset.device, btn.dataset.disk));
+      });
+      this.$$(".remove-disk").forEach((btn) => {
+        btn.addEventListener("click", () => this.removeDisk(btn.dataset.device, btn.dataset.disk));
+      });
 
       this.$("#create-raid").addEventListener("click", () => this.createRaid());
     } catch (err) {
@@ -146,6 +174,41 @@ class RaidManager extends BaseComponent {
       this.render();
     } catch (err) {
       alert(`Failed to remove: ${err.message}`);
+    }
+  }
+
+  async addSpare(device) {
+    const availableDisks = this.disks.map(d => d.name);
+    const disk = prompt(`Enter disk to add as spare for ${device}\nAvailable: ${availableDisks.join(", ")}`);
+    if (!disk) return;
+
+    try {
+      await window.api.post(`/api/disks/raid/${encodeURIComponent(device.replace("/dev/", ""))}/add`, { disk });
+      this.render();
+    } catch (err) {
+      alert(`Failed to add spare: ${err.message}`);
+    }
+  }
+
+  async failDisk(device, disk) {
+    if (!confirm(`Mark disk ${disk} as faulty in ${device}?`)) return;
+
+    try {
+      await window.api.post(`/api/disks/raid/${encodeURIComponent(device.replace("/dev/", ""))}/fail`, { disk });
+      this.render();
+    } catch (err) {
+      alert(`Failed to fail disk: ${err.message}`);
+    }
+  }
+
+  async removeDisk(device, disk) {
+    if (!confirm(`Remove disk ${disk} from ${device}?`)) return;
+
+    try {
+      await window.api.post(`/api/disks/raid/${encodeURIComponent(device.replace("/dev/", ""))}/remove`, { disk });
+      this.render();
+    } catch (err) {
+      alert(`Failed to remove disk: ${err.message}`);
     }
   }
 
