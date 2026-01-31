@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import multer from "multer";
 import * as path from "path";
 import * as fileService from "../services/file.service";
+import { log, LogLevel } from "../services/logging.service";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
@@ -14,10 +15,12 @@ router.get("/", async (req: Request, res: Response) => {
     res.json(files);
   } catch (err: any) {
     if (err.message === "Path traversal denied") {
+      log(LogLevel.WARN, "Path traversal attempt detected", { path: req.query.path });
       res.status(403).json({ error: err.message });
       return;
     }
-    res.status(500).json({ error: err.message });
+    log(LogLevel.ERROR, "Failed to list files", { error: err.message, stack: err.stack, path: req.query.path });
+    res.status(500).json({ error: "Failed to list directory contents" });
   }
 });
 
@@ -34,10 +37,12 @@ router.post("/", upload.single("file"), async (req: Request, res: Response) => {
     res.json({ ok: true, path: filePath });
   } catch (err: any) {
     if (err.message === "Path traversal denied") {
+      log(LogLevel.WARN, "Path traversal attempt detected in file upload", { path: req.body.path });
       res.status(403).json({ error: err.message });
       return;
     }
-    res.status(500).json({ error: err.message });
+    log(LogLevel.ERROR, "Failed to upload file", { error: err.message, stack: err.stack, path: req.body.path });
+    res.status(500).json({ error: "Failed to upload file" });
   }
 });
 
@@ -53,10 +58,12 @@ router.post("/mkdir", async (req: Request, res: Response) => {
     res.json({ ok: true, path: dirPath });
   } catch (err: any) {
     if (err.message === "Path traversal denied") {
+      log(LogLevel.WARN, "Path traversal attempt detected in directory creation", { path: req.body.path });
       res.status(403).json({ error: err.message });
       return;
     }
-    res.status(500).json({ error: err.message });
+    log(LogLevel.ERROR, "Failed to create directory", { error: err.message, stack: err.stack, path: req.body.path });
+    res.status(500).json({ error: "Failed to create directory" });
   }
 });
 
@@ -72,10 +79,12 @@ router.put("/", async (req: Request, res: Response) => {
     res.json({ ok: true, path: filePath });
   } catch (err: any) {
     if (err.message === "Path traversal denied") {
+      log(LogLevel.WARN, "Path traversal attempt detected in file update", { path: req.body.path });
       res.status(403).json({ error: err.message });
       return;
     }
-    res.status(500).json({ error: err.message });
+    log(LogLevel.ERROR, "Failed to update file", { error: err.message, stack: err.stack, path: req.body.path });
+    res.status(500).json({ error: "Failed to update file" });
   }
 });
 
@@ -91,10 +100,12 @@ router.delete("/", async (req: Request, res: Response) => {
     res.json({ ok: true });
   } catch (err: any) {
     if (err.message === "Path traversal denied") {
+      log(LogLevel.WARN, "Path traversal attempt detected in file deletion", { path: req.query.path });
       res.status(403).json({ error: err.message });
       return;
     }
-    res.status(500).json({ error: err.message });
+    log(LogLevel.ERROR, "Failed to delete file", { error: err.message, stack: err.stack, path: req.query.path });
+    res.status(500).json({ error: "Failed to delete file or directory" });
   }
 });
 

@@ -1,0 +1,27 @@
+# Docker Compose override for QEMU test environment
+#
+# Copy this file to the project root as docker-compose.override.yml
+#
+# cp testing/docker-compose.override.yml.example docker-compose.override.yml
+#
+# Make sure the test VM and tunnel are running:
+#   cd testing/qemu
+#   ./testenv start
+#   ./testenv tunnel
+
+services:
+  app:
+    volumes:
+      # Use test VM socket instead of host socket
+      - /tmp/hostagent-test.sock:/var/run/hostagent.sock
+    environment:
+      # Socket path (same as default, but explicit)
+      - HOSTAGENT_SOCKET=/var/run/hostagent.sock
+
+      # Optional: Enable debug logging
+      # - DEBUG=true
+
+    # Optional: Add labels for easier identification
+    labels:
+      - "s3custom.environment=test"
+      - "s3custom.vm=qemu"

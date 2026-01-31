@@ -665,3 +665,59 @@ input[type="checkbox"] {
 .spin-animation {
   animation: spin 1s linear infinite;
 }
+
+/* Activity logger adjustments when modals are open */
+body:has(modal-dialog[style*="display: block"]) activity-logger {
+  z-index: 9998; /* Just below modals */
+}
+
+/* Responsive adjustments for activity logger */
+@media (max-width: 768px) {
+  activity-logger {
+    max-width: calc(100% - 32px);
+    margin: 0 16px 16px 16px;
+  }
+}
+
+/* Modal improvements */
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+/* Disk card improvements for very small screens */
+@media (max-width: 480px) {
+  .disk-card {
+    padding: 16px;
+  }
+
+  .disk-actions {
+    flex-direction: column;
+  }
+
+  .disk-action-btn {
+    width: 100%;
+  }
+}
+
+/* Better spacing for form elements in modals */
+modal-dialog .form-row {
+  margin-bottom: 16px;
+}
+
+modal-dialog input,
+modal-dialog select {
+  width: 100%;
+  max-width: 400px;
+}
+
+/* Improve button spacing */
+.btn-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

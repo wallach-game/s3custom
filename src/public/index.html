@@ -60,6 +60,18 @@
             <span>Files</span>
           </a>
         </li>
+        <li>
+          <a href="#/analytics" class="nav-link" data-route="analytics">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
+            <span>Analytics</span>
+          </a>
+        </li>
+        <li>
+          <a href="#/rotation" class="nav-link" data-route="rotation">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            <span>Rotation</span>
+          </a>
+        </li>
       </ul>
       <div class="sidebar-footer">
         <div class="agent-status" id="agent-status">
@@ -71,7 +83,11 @@
     <main class="content" id="app"></main>
   </div>
 
+  <activity-logger></activity-logger>
+
   <script type="module" src="/shared/base-component.js"></script>
+  <script type="module" src="/components/activity-logger.js"></script>
+  <script type="module" src="/components/modal-dialog.js"></script>
   <script type="module" src="/components/disk-list.js"></script>
   <script type="module" src="/components/examine-disk.js"></script>
   <script type="module" src="/components/recover-disk.js"></script>
@@ -79,6 +95,8 @@
   <script type="module" src="/components/raid-manager.js"></script>
   <script type="module" src="/components/power-control.js"></script>
   <script type="module" src="/components/file-manager.js"></script>
+  <script type="module" src="/components/disk-analytics.js"></script>
+  <script type="module" src="/components/disk-rotation.js"></script>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

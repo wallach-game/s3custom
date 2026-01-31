@@ -1,0 +1,302 @@
+S3 CUSTOM - ANALYTICS & ROTATION IMPLEMENTATION
+FILES CREATED AND MODIFIED
+Date: 2026-01-31
+
+===============================================================================
+NEW FILES CREATED (7 total)
+===============================================================================
+
+BACKEND SERVICES (3 files):
+---------------------------
+1. src/services/smart-history.service.ts
+   - SMART history storage and retrieval
+   - JSON-based persistence (data/smart-history/)
+   - 1000 entry limit per disk
+   - Lines: ~120
+
+2. src/services/life-expectancy.service.ts
+   - Life expectancy calculation algorithm
+   - Multi-factor analysis (5 weighted factors)
+   - Confidence scoring
+   - Warning generation
+   - Lines: ~280
+
+3. src/services/disk-rotation.service.ts
+   - Automated disk power rotation scheduler
+   - Round-robin rotation algorithm
+   - State and config persistence
+   - Power savings tracking
+   - Lines: ~350
+
+FRONTEND COMPONENTS (2 files):
+------------------------------
+4. src/public/components/disk-analytics.js
+   - Analytics dashboard with charts
+   - Canvas-based graph rendering
+   - Life expectancy display
+   - Historical trend visualization
+   - Lines: ~450
+
+5. src/public/components/disk-rotation.js
+   - Rotation control panel
+   - Configuration interface
+   - Real-time statistics display
+   - Disk state visualization
+   - Lines: ~380
+
+DOCUMENTATION (2 files):
+------------------------
+6. ANALYTICS_ROTATION_IMPLEMENTATION.md
+   - Comprehensive implementation documentation
+   - Architecture details
+   - API reference
+   - Testing instructions
+   - Lines: ~650
+
+7. QUICK_START_ANALYTICS_ROTATION.md
+   - User-friendly quick start guide
+   - Setup instructions
+   - Troubleshooting tips
+   - Best practices
+   - Lines: ~350
+
+===============================================================================
+MODIFIED FILES (5 total)
+===============================================================================
+
+BACKEND:
+--------
+1. src/index.ts
+   Changes:
+   - Added import for disk-rotation.service
+   - Added initializeRotationService() call on startup
+   Lines modified: ~5
+
+2. src/routes/disks.ts
+   Changes:
+   - Added imports for 3 new services
+   - Added 8 new API endpoints:
+     * POST /api/disks/smart-history
+     * GET /api/disks/smart-history/:disk
+     * GET /api/disks/life-expectancy/:disk
+     * GET /api/disks/rotation/status
+     * POST /api/disks/rotation/enable
+     * POST /api/disks/rotation/disable
+     * PUT /api/disks/rotation/config
+     * GET /api/disks/rotation/stats
+   Lines modified: ~80
+
+FRONTEND:
+---------
+3. src/public/index.html
+   Changes:
+   - Added 2 new navigation menu items (Analytics, Rotation)
+   - Added 2 new component script imports
+   Lines modified: ~15
+
+4. src/public/app.js
+   Changes:
+   - Added 2 new routes to router config
+     * analytics: "disk-analytics"
+     * rotation: "disk-rotation"
+   Lines modified: ~2
+
+5. src/public/components/disk-list.js
+   Changes:
+   - Added rotation status API call
+   - Added rotation badge rendering function
+   - Added rotation badge CSS styles
+   - Added rotation status display in disk cards
+   Lines modified: ~50
+
+DOCUMENTATION:
+--------------
+6. CLAUDE.md
+   Changes:
+   - Added new API routes section
+   - Added comprehensive feature documentation
+   - Added usage notes
+   - Added data storage information
+   Lines modified: ~80
+
+===============================================================================
+COMPILED OUTPUT (AUTO-GENERATED)
+===============================================================================
+
+DIST FILES (TypeScript compilation output):
+-------------------------------------------
+dist/index.js
+dist/index.d.ts
+dist/routes/disks.js
+dist/routes/disks.d.ts
+dist/services/smart-history.service.js
+dist/services/smart-history.service.d.ts
+dist/services/life-expectancy.service.js
+dist/services/life-expectancy.service.d.ts
+dist/services/disk-rotation.service.js
+dist/services/disk-rotation.service.d.ts
+
+===============================================================================
+RUNTIME DATA DIRECTORIES (AUTO-CREATED)
+===============================================================================
+
+data/
+├── smart-history/          # SMART history JSON files (one per disk)
+│   ├── sda.json
+│   ├── sdb.json
+│   └── ...
+├── rotation-config.json    # Rotation configuration
+└── rotation-state.json     # Rotation runtime state
+
+Note: These directories and files are created automatically at runtime.
+They should NOT be committed to git (add to .gitignore).
+
+===============================================================================
+STATISTICS
+===============================================================================
+
+Total new files created:       7
+Total existing files modified: 6
+Total lines of code added:     ~1,800
+
+Backend code (TypeScript):     ~750 lines
+Frontend code (JavaScript):    ~830 lines
+Documentation (Markdown):      ~1,000 lines
+
+New API endpoints:             8
+New UI components:             2
+New services:                  3
+
+Build status:                  ✅ SUCCESS (TypeScript compilation passed)
+Integration status:            ✅ COMPLETE
+Documentation status:          ✅ COMPLETE
+
+===============================================================================
+GIT STATUS (Suggested)
+===============================================================================
+
+Files to commit:
+
+# New files
+git add src/services/smart-history.service.ts
+git add src/services/life-expectancy.service.ts
+git add src/services/disk-rotation.service.ts
+git add src/public/components/disk-analytics.js
+git add src/public/components/disk-rotation.js
+git add ANALYTICS_ROTATION_IMPLEMENTATION.md
+git add QUICK_START_ANALYTICS_ROTATION.md
+git add FILES_CHANGED_ANALYTICS_ROTATION.txt
+
+# Modified files
+git add src/index.ts
+git add src/routes/disks.ts
+git add src/public/index.html
+git add src/public/app.js
+git add src/public/components/disk-list.js
+git add CLAUDE.md
+
+# .gitignore addition (if not already present)
+echo "data/" >> .gitignore
+git add .gitignore
+
+# Suggested commit message
+git commit -m "Add disk analytics dashboard and intelligent rotation power management
+
+Features:
+- SMART history tracking and visualization
+- Life expectancy prediction with multi-factor analysis
+- Automated disk power rotation scheduler
+- Analytics dashboard with canvas charts
+- Rotation control panel with real-time monitoring
+- Integration with existing disk list UI
+
+New API endpoints: 8
+New services: 3
+New components: 2
+Total lines: ~1,800"
+
+===============================================================================
+DEPLOYMENT CHECKLIST
+===============================================================================
+
+[ ] Build TypeScript: npm run build
+[ ] Verify compilation: Check dist/ directory
+[ ] Update Docker image: docker compose build
+[ ] Restart containers: docker compose up -d
+[ ] Verify health: curl http://localhost:8080/health
+[ ] Test analytics: Navigate to #/analytics
+[ ] Test rotation: Navigate to #/rotation
+[ ] Check logs: docker compose logs -f
+[ ] Verify data directories: ls -la data/
+[ ] Test API endpoints: See QUICK_START guide
+
+===============================================================================
+DEPENDENCIES
+===============================================================================
+
+No new npm packages required. All features use existing dependencies:
+- express (existing)
+- TypeScript (existing)
+- Node.js fs, path modules (built-in)
+
+External tools required on host:
+- smartctl (smartmontools package) - for SMART data collection
+- hdparm - for disk power control
+
+Install on Ubuntu/Debian:
+  sudo apt install smartmontools hdparm
+
+===============================================================================
+TESTING CHECKLIST
+===============================================================================
+
+Backend:
+[ ] SMART history save/retrieve
+[ ] Life expectancy calculation
+[ ] Rotation enable/disable
+[ ] Rotation config update
+[ ] Rotation scheduler execution
+[ ] State persistence across restarts
+
+Frontend:
+[ ] Analytics dashboard renders
+[ ] Charts display correctly
+[ ] Life expectancy shows warnings
+[ ] Rotation toggle works
+[ ] Settings save correctly
+[ ] Disk state indicators update
+
+Integration:
+[ ] Rotation badges on disk list
+[ ] Navigation menu items work
+[ ] Activity logger tracks events
+[ ] API error handling
+
+===============================================================================
+KNOWN LIMITATIONS
+===============================================================================
+
+1. SMART history must be manually populated (no auto-collection yet)
+2. Life expectancy requires smartctl to be installed
+3. Rotation requires hdparm to be installed
+4. Minimum 3 disks required for rotation
+5. Cannot rotate disks in active RAID arrays
+6. History limited to 1000 entries per disk
+7. No built-in notifications/alerts
+
+===============================================================================
+FUTURE ENHANCEMENT IDEAS
+===============================================================================
+
+1. Automatic SMART data collection background job
+2. Email/webhook notifications for critical warnings
+3. Prometheus metrics exporter
+4. Advanced analytics (comparative analysis, predictive failure)
+5. Activity-based rotation (monitor actual I/O)
+6. RAID rebuild detection and rotation pause
+7. Mobile-responsive chart improvements
+8. Export/import history data
+9. Multi-disk life expectancy comparison view
+10. Power consumption cost calculator
+
+===============================================================================

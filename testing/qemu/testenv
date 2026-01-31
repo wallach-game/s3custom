@@ -1,0 +1,301 @@
+#!/bin/bash
+# Master control script for QEMU test environment
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/scripts/config.sh"
+
+# Show usage
+show_usage() {
+    cat << EOF
+${BLUE}S3 Custom QEMU/KVM Test Environment${NC}
+
+Usage: $0 <command> [options]
+
+Commands:
+  ${GREEN}setup${NC}              Initial setup (download Alpine, create VM)
+  ${GREEN}start${NC}              Start the test VM
+  ${GREEN}stop${NC}               Stop the test VM
+  ${GREEN}status${NC}             Show VM and tunnel status
+  ${GREEN}deploy${NC}             Deploy host-agent to VM
+  ${GREEN}tunnel${NC}             Setup SSH tunnel for socket
+  ${GREEN}ssh${NC}                SSH into the VM
+  ${GREEN}full${NC}               Full setup and start (all-in-one)
+  ${GREEN}clean${NC}              Stop everything and clean up
+  ${GREEN}reset${NC}              Reset to clean snapshot
+
+Disk Management:
+  ${GREEN}create-disks${NC}       Create virtual test disks
+  ${GREEN}snapshot${NC} <args>    Manage snapshots (list/create/restore/delete)
+
+Test Scenarios:
+  ${GREEN}test${NC} <scenario>    Run a test scenario
+  ${GREEN}test-list${NC}          List available test scenarios
+
+Examples:
+  # First time setup
+  $0 full
+
+  # Start existing environment
+  $0 start
+  $0 tunnel
+
+  # Create a clean snapshot after setup
+  $0 snapshot create clean-install
+
+  # Reset to clean state
+  $0 reset
+
+  # Run tests
+  $0 test raid-create
+  $0 test disk-recovery
+
+Options:
+  -h, --help          Show this help message
+  -v, --verbose       Verbose output
+
+Environment Variables:
+  VM_SSH_PORT         SSH port for VM (default: 2222)
+  VM_MEMORY           VM memory in MB (default: 2048)
+  VM_CPUS             VM CPU count (default: 2)
+
+EOF
+}
+
+# Check status
+check_status() {
+    log_info "Test Environment Status"
+    echo ""
+
+    # VM status
+    local pid_file="${VM_IMAGES_DIR}/${VM_NAME}.pid"
+    if [ -f "$pid_file" ] && ps -p "$(cat "$pid_file")" > /dev/null 2>&1; then
+        echo -e "  VM: ${GREEN}Running${NC} (PID: $(cat "$pid_file"))"
+        echo "      SSH: ssh -p $VM_SSH_PORT alpine@localhost"
+    else
+        echo -e "  VM: ${RED}Stopped${NC}"
+    fi
+
+    # Tunnel status
+    local tunnel_pid_file="${VM_IMAGES_DIR}/tunnel.pid"
+    if [ -f "$tunnel_pid_file" ] && ps -p "$(cat "$tunnel_pid_file")" > /dev/null 2>&1; then
+        echo -e "  Tunnel: ${GREEN}Running${NC} (PID: $(cat "$tunnel_pid_file"))"
+        echo "      Socket: $HOSTAGENT_SOCKET_PATH"
+    else
+        echo -e "  Tunnel: ${RED}Stopped${NC}"
+    fi
+
+    # Disk status
+    echo ""
+    echo "  Disks:"
+    if [ -f "${VM_IMAGES_DIR}/system.qcow2" ]; then
+        echo -e "    System: ${GREEN}Present${NC}"
+    else
+        echo -e "    System: ${RED}Missing${NC}"
+    fi
+
+    local disk_count=0
+    for i in $(seq 0 $((DISK_COUNT - 1))); do
+        if [ -f "${VM_IMAGES_DIR}/disk${i}.${DISK_FORMAT}" ]; then
+            ((disk_count++))
+        fi
+    done
+    echo "    Test Disks: $disk_count / $DISK_COUNT"
+}
+
+# Full setup
+full_setup() {
+    log_info "Starting full test environment setup..."
+    echo ""
+
+    # Check if already set up
+    if [ -f "${VM_IMAGES_DIR}/system.qcow2" ]; then
+        log_warn "VM already exists. Skipping setup."
+        log_info "Use 'reset' to recreate from scratch."
+    else
+        log_info "Step 1: Creating VM..."
+        "$SCRIPT_DIR/scripts/setup-vm.sh"
+    fi
+
+    # Create disks if needed
+    if [ ! -f "${VM_IMAGES_DIR}/disk0.${DISK_FORMAT}" ]; then
+        log_info "Step 2: Creating test disks..."
+        "$SCRIPT_DIR/scripts/create-disks.sh"
+    else
+        log_info "Step 2: Test disks already exist"
+    fi
+
+    # Start VM
+    log_info "Step 3: Starting VM..."
+    "$SCRIPT_DIR/scripts/start-vm.sh" -w
+
+    # Deploy agent
+    log_info "Step 4: Deploying host-agent..."
+    "$SCRIPT_DIR/scripts/deploy-agent.sh"
+
+    # Setup tunnel
+    log_info "Step 5: Setting up SSH tunnel..."
+    "$SCRIPT_DIR/scripts/setup-tunnel.sh"
+
+    echo ""
+    log_success "Full setup complete!"
+    echo ""
+    log_info "Next steps:"
+    log_info "  1. Create a clean snapshot: $0 snapshot create clean-install"
+    log_info "  2. Update docker-compose: see testing/README.md"
+    log_info "  3. Start the app: docker compose up -d"
+    log_info "  4. Run tests: $0 test raid-create"
+}
+
+# Clean shutdown
+clean_shutdown() {
+    log_info "Cleaning up test environment..."
+
+    # Stop tunnel
+    if [ -f "${VM_IMAGES_DIR}/tunnel.pid" ]; then
+        log_info "Stopping tunnel..."
+        "$SCRIPT_DIR/scripts/stop-tunnel.sh" || true
+    fi
+
+    # Stop VM
+    if [ -f "${VM_IMAGES_DIR}/${VM_NAME}.pid" ]; then
+        log_info "Stopping VM..."
+        "$SCRIPT_DIR/scripts/stop-vm.sh" || true
+    fi
+
+    log_success "Cleanup complete"
+}
+
+# Reset to clean state
+reset_env() {
+    log_warn "This will restore the VM to the 'clean-install' snapshot"
+    read -p "Continue? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Reset cancelled"
+        exit 0
+    fi
+
+    # Stop everything
+    clean_shutdown
+
+    # Restore snapshot
+    log_info "Restoring clean-install snapshot..."
+    "$SCRIPT_DIR/scripts/snapshot.sh" restore clean-install
+
+    # Restart
+    log_info "Restarting VM..."
+    "$SCRIPT_DIR/scripts/start-vm.sh" -w
+
+    log_info "Setting up tunnel..."
+    "$SCRIPT_DIR/scripts/setup-tunnel.sh"
+
+    log_success "Environment reset complete"
+}
+
+# SSH into VM
+ssh_vm() {
+    ssh -p "$VM_SSH_PORT" -o StrictHostKeyChecking=no alpine@localhost "$@"
+}
+
+# List test scenarios
+list_tests() {
+    log_info "Available test scenarios:"
+    echo ""
+
+    if [ -d "$SCENARIOS_DIR" ] && [ -n "$(ls -A "$SCENARIOS_DIR"/*.sh 2>/dev/null)" ]; then
+        for scenario in "$SCENARIOS_DIR"/*.sh; do
+            local name=$(basename "$scenario" .sh)
+            local desc=$(grep "^# Description:" "$scenario" | cut -d: -f2- || echo "No description")
+            echo "  ${GREEN}${name}${NC} - ${desc}"
+        done
+    else
+        log_warn "No test scenarios found in $SCENARIOS_DIR"
+        log_info "Create scenarios with: .sh files in $SCENARIOS_DIR"
+    fi
+}
+
+# Run test scenario
+run_test() {
+    local scenario=$1
+
+    if [ -z "$scenario" ]; then
+        log_error "Test scenario name required"
+        list_tests
+        exit 1
+    fi
+
+    local scenario_file="$SCENARIOS_DIR/${scenario}.sh"
+
+    if [ ! -f "$scenario_file" ]; then
+        log_error "Test scenario not found: $scenario"
+        list_tests
+        exit 1
+    fi
+
+    log_info "Running test scenario: $scenario"
+    bash "$scenario_file"
+}
+
+# Main execution
+if [ $# -eq 0 ]; then
+    show_usage
+    exit 0
+fi
+
+command=$1
+shift
+
+case $command in
+    setup)
+        "$SCRIPT_DIR/scripts/setup-vm.sh" "$@"
+        ;;
+    start)
+        "$SCRIPT_DIR/scripts/start-vm.sh" "$@"
+        ;;
+    stop)
+        "$SCRIPT_DIR/scripts/stop-vm.sh" "$@"
+        ;;
+    status)
+        check_status
+        ;;
+    deploy)
+        "$SCRIPT_DIR/scripts/deploy-agent.sh" "$@"
+        ;;
+    tunnel)
+        "$SCRIPT_DIR/scripts/setup-tunnel.sh" "$@"
+        ;;
+    ssh)
+        ssh_vm "$@"
+        ;;
+    full)
+        full_setup
+        ;;
+    clean)
+        clean_shutdown
+        ;;
+    reset)
+        reset_env
+        ;;
+    create-disks)
+        "$SCRIPT_DIR/scripts/create-disks.sh"
+        ;;
+    snapshot)
+        "$SCRIPT_DIR/scripts/snapshot.sh" "$@"
+        ;;
+    test)
+        run_test "$@"
+        ;;
+    test-list)
+        list_tests
+        ;;
+    -h|--help)
+        show_usage
+        ;;
+    *)
+        log_error "Unknown command: $command"
+        show_usage
+        exit 1
+        ;;
+esac

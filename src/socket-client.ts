@@ -58,3 +58,43 @@ export async function sendCommand(
     });
   });
 }
+
+/**
+ * Send command with retry logic and exponential backoff
+ * @param cmd Command name
+ * @param args Command arguments
+ * @param maxRetries Maximum number of retry attempts (default: 3)
+ * @returns Command output
+ */
+export async function sendCommandWithRetry(
+  cmd: string,
+  args: string[] = [],
+  maxRetries: number = 3
+): Promise<{ stdout: string; stderr: string }> {
+  let lastError: Error;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await sendCommand(cmd, args);
+    } catch (err) {
+      lastError = err as Error;
+
+      // Don't retry on validation errors or command not found
+      if (
+        lastError.message.includes("not whitelisted") ||
+        lastError.message.includes("Invalid JSON") ||
+        lastError.message.includes("disallowed characters")
+      ) {
+        throw lastError;
+      }
+
+      // If this isn't the last attempt, wait before retrying
+      if (attempt < maxRetries - 1) {
+        const backoffMs = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
+    }
+  }
+
+  throw lastError!;
+}

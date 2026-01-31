@@ -20,7 +20,9 @@ const WHITELISTED_COMMANDS: Record<string, string> = {
   ddrescue: "/usr/bin/ddrescue",
 };
 
-const DANGEROUS_PATTERNS = /[;&|`$(){}]/;
+const DANGEROUS_PATTERNS = /[;&|`$(){}*?[\]<>\n\r'"`\\]/;
+const MAX_ARG_LENGTH = 4096;
+const MAX_ARGS_COUNT = 20;
 
 interface Request {
   cmd: string;
@@ -59,6 +61,16 @@ function handleRequest(req: Request): Promise<Response> {
     const args = req.args ?? [];
     if (!Array.isArray(args) || !args.every((a) => typeof a === "string")) {
       resolve({ ok: false, error: "Args must be an array of strings" });
+      return;
+    }
+
+    if (args.length > MAX_ARGS_COUNT) {
+      resolve({ ok: false, error: `Too many arguments (max ${MAX_ARGS_COUNT})` });
+      return;
+    }
+
+    if (args.some((a) => a.length > MAX_ARG_LENGTH)) {
+      resolve({ ok: false, error: `Argument exceeds maximum length (max ${MAX_ARG_LENGTH})` });
       return;
     }
 
@@ -118,7 +130,9 @@ function startServer(): void {
   });
 
   server.listen(SOCKET_PATH, () => {
-    fs.chmodSync(SOCKET_PATH, 0o666);
+    fs.chmodSync(SOCKET_PATH, 0o660);
+    // Note: Set proper group ownership with: chown :docker /var/run/hostagent.sock
+    // Ensure users are in the appropriate group for socket access
     console.log(`Host agent listening on ${SOCKET_PATH}`);
   });
 

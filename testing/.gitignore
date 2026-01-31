@@ -1,0 +1,26 @@
+# QEMU VM images and runtime files
+qemu/vm-images/
+*.qcow2
+*.raw
+*.iso
+
+# Cloud-init generated files
+qemu/cloud-init/user-data
+qemu/cloud-init/meta-data
+qemu/cloud-init/answers
+
+# Runtime files
+*.pid
+*.sock
+*.monitor
+
+# SSH keys (if generated)
+*.key
+*.pub
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/

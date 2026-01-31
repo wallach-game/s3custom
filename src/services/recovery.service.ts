@@ -10,6 +10,17 @@ export async function mountDiskReadOnly(
 ): Promise<string> {
   const devicePath = disk.startsWith("/dev/") ? disk : `/dev/${disk}`;
 
+  // Validate mount path to prevent unauthorized mounts
+  const mountPathPattern = /^\/mnt\/(recovery|temp|disks)[a-zA-Z0-9_\-\/]*$/;
+  if (!mountPathPattern.test(mountPath)) {
+    throw new Error("Invalid mount path. Must start with /mnt/recovery, /mnt/temp, or /mnt/disks");
+  }
+
+  // Prevent path traversal in mount path
+  if (mountPath.includes("..")) {
+    throw new Error("Mount path cannot contain '..'");
+  }
+
   // Ensure mount path exists and is empty, or create it
   try {
     await sendCommand("mkdir", ["-p", mountPath]);
@@ -27,7 +38,7 @@ export async function mountDiskReadOnly(
   if (!examinationResult.exists) {
     throw new Error(`Disk ${disk} not found.`);
   }
-  
+
   if (examinationResult.raidInfo.isRaid) {
       log(LogLevel.WARN, `Attempting to mount a disk with RAID metadata in recovery mode. Consider stopping kernel RAID first if assembled. Disk: ${disk}`);
       // In a real scenario, we might try to stop mdadm assembly here if needed.
@@ -43,6 +54,12 @@ export async function mountDiskReadOnly(
     examinationResult.partitions.length > 0
       ? examinationResult.partitions[0].fstype // Assuming we are trying to mount the first partition for now
       : examinationResult.filesystemInfo?.type;
+
+  // Validate filesystem type - whitelist known safe filesystems
+  const allowedFilesystems = ["ntfs", "ntfs3", "ext4", "ext3", "ext2", "btrfs", "xfs", "vfat", "exfat"];
+  if (fstype && !allowedFilesystems.includes(fstype)) {
+    log(LogLevel.WARN, `Attempting to mount disk with non-whitelisted filesystem type: ${fstype}`);
+  }
 
   log(LogLevel.INFO, `Attempting read-only mount for ${disk} (FS: ${fstype}) to ${mountPath}`);
 

@@ -1,0 +1,186 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                   S3CUSTOM TEST ENVIRONMENT - QUICK REFERENCE                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+LOCATION: /home/jirka/Documents/s3custom_report/s3custom/testing/
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ FIRST TIME SETUP                                                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+cd testing/qemu
+./scripts/check-requirements.sh              # Check system
+./testenv full                               # Complete setup
+./testenv snapshot create clean-install      # Create clean snapshot
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ DAILY USAGE                                                                  │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+./testenv start                              # Start VM
+./testenv tunnel                             # Setup tunnel
+./testenv status                             # Check status
+./testenv ssh                                # SSH into VM
+./testenv stop                               # Stop VM
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ TESTING                                                                      │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+./testenv test-list                          # List available tests
+./testenv test raid-create                   # Run RAID creation test
+./testenv test raid-recovery                 # Run RAID recovery test
+./testenv test disk-power                    # Run power management test
+./testenv test full-test                     # Run comprehensive test
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ SNAPSHOTS                                                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+./testenv snapshot list                      # List snapshots
+./testenv snapshot create NAME               # Create snapshot
+./testenv snapshot restore NAME              # Restore snapshot
+./testenv reset                              # Reset to clean-install
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ MONITORING                                                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+./scripts/monitor-vm.sh status               # VM status
+./scripts/monitor-vm.sh logs                 # Tail VM logs
+./scripts/monitor-vm.sh raid                 # Monitor RAID sync
+./scripts/monitor-vm.sh resources            # Resource usage
+./scripts/monitor-vm.sh all                  # Complete info
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ MAKEFILE SHORTCUTS                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+make install                                 # First time setup
+make start                                   # Start VM
+make stop                                    # Stop VM
+make status                                  # Check status
+make deploy                                  # Deploy agent
+make tunnel                                  # Setup tunnel
+make ssh                                     # SSH to VM
+make reset                                   # Reset to clean
+make clean                                   # Stop everything
+
+make test TEST=raid-create                   # Run specific test
+make test-all                                # Run all tests
+make dev-start                               # Start VM + tunnel
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ TROUBLESHOOTING                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+# VM won't start
+./testenv status
+ls -l /dev/kvm
+ls -l vm-images/system.qcow2
+
+# Can't SSH
+sleep 30                                     # Wait for boot
+ssh -p 2222 alpine@localhost
+
+# Tunnel issues
+./scripts/stop-tunnel.sh
+./testenv tunnel
+echo '{"cmd":"lsblk","args":["-J"]}' | nc -U /tmp/hostagent-test.sock
+
+# Agent not responding (on VM)
+./testenv ssh
+sudo rc-service hostagent-s3custom status
+sudo rc-service hostagent-s3custom restart
+sudo tail -f /var/log/messages | grep hostagent
+
+# Container can't connect
+./testenv status
+docker compose restart
+docker compose logs -f
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ FILE LOCATIONS                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+VM Images:      testing/qemu/vm-images/
+Scripts:        testing/qemu/scripts/
+Scenarios:      testing/qemu/scenarios/
+Documentation:  testing/*.md
+
+Socket (host):  /tmp/hostagent-test.sock
+Socket (VM):    /var/run/hostagent.sock
+VM SSH:         localhost:2222
+Web UI:         http://localhost:8080
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ DOCKER INTEGRATION                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+# Setup
+cp testing/docker-compose.override.yml.example docker-compose.override.yml
+
+# Start environment
+cd testing/qemu && ./testenv start && ./testenv tunnel
+
+# Start container
+cd ../.. && docker compose up -d
+
+# Access
+http://localhost:8080
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ CONFIGURATION                                                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Edit: testing/qemu/scripts/config.sh
+
+VM_MEMORY="2048"                             # VM memory in MB
+VM_CPUS="2"                                  # CPU cores
+VM_SSH_PORT="2222"                           # SSH port
+DISK_COUNT="6"                               # Number of test disks
+DISK_FORMAT="qcow2"                          # Disk format (qcow2/raw)
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ DOCUMENTATION                                                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+QUICKSTART.md                                # 5-minute setup guide
+README.md                                    # Full documentation
+INDEX.md                                     # Command reference
+TESTING_ENVIRONMENT_SUMMARY.md               # Architecture & overview
+DELIVERY_SUMMARY.md                          # Delivery summary
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ TEST SCENARIOS                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+raid-create      - Create RAID 1 and RAID 5 arrays
+raid-recovery    - Disk failure and recovery simulation
+disk-power       - Power management (spin down/up)
+disk-smart       - SMART monitoring
+full-test        - Comprehensive end-to-end test
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ WORKFLOW EXAMPLES                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+# Test RAID functionality
+./testenv start && ./testenv tunnel
+./testenv test raid-create
+# ... verify in web UI ...
+./testenv reset
+
+# Experiment with changes
+./testenv snapshot create before-experiment
+# ... make changes ...
+./testenv snapshot restore before-experiment
+
+# Run all tests
+./testenv start && ./testenv tunnel
+make test-all
+./testenv stop
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ For detailed help, see testing/README.md or run: ./testenv --help           ║
+╚══════════════════════════════════════════════════════════════════════════════╝

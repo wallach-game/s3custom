@@ -1,4 +1,5 @@
 import * as fs from "fs/promises";
+import * as fsSync from "fs";
 import * as path from "path";
 
 const BASE_DIR = process.env.FILES_ROOT || "/mnt/disks";
@@ -7,10 +8,32 @@ function safePath(userPath: string): string {
   // Strip leading slashes so path.resolve treats it as relative to BASE_DIR
   const cleaned = userPath.replace(/^\/+/, "");
   const resolved = path.resolve(BASE_DIR, cleaned);
-  if (!resolved.startsWith(BASE_DIR)) {
+
+  // Resolve symlinks to prevent escape via symbolic links
+  let realPath: string;
+  try {
+    realPath = fsSync.realpathSync(resolved);
+  } catch (err) {
+    // Path doesn't exist yet (e.g., for file creation) - validate the parent directory
+    const dirname = path.dirname(resolved);
+    try {
+      const realDir = fsSync.realpathSync(dirname);
+      if (!realDir.startsWith(fsSync.realpathSync(BASE_DIR))) {
+        throw new Error("Path traversal denied");
+      }
+      // Reconstruct the full path with the real parent directory
+      realPath = path.join(realDir, path.basename(resolved));
+    } catch {
+      // Parent doesn't exist either - validate resolved path directly
+      realPath = resolved;
+    }
+  }
+
+  if (!realPath.startsWith(fsSync.realpathSync(BASE_DIR))) {
     throw new Error("Path traversal denied");
   }
-  return resolved;
+
+  return realPath;
 }
 
 export interface FileEntry {
